@@ -1,32 +1,52 @@
-import express from 'express';
+// eslint-disable-next-line no-unused-vars
+import { Express } from 'express';
 import AppController from '../controllers/AppController';
-import UsersController from '../controllers/UsersController';
 import AuthController from '../controllers/AuthController';
+import UsersController from '../controllers/UsersController';
 import FilesController from '../controllers/FilesController';
+import { basicAuthenticate, xTokenAuthenticate } from '../middlewares/auth';
+import { APIError, errorResponse } from '../middlewares/error';
 
-function controllerRouting(app) {
-  const router = express.Router();
-  app.use('/', router);
+/**
+ * Injects routes with their handlers to the given Express application.
+ * @param {Express} api
+ */
+const injectRoutes = (api) => {
+  // Import dependencies
+  import { Express } from 'express';
+  import AppController from '../controllers/AppController';
+  import AuthController from '../controllers/AuthController';
+  import UsersController from '../controllers/UsersController';
+  import FilesController from '../controllers/FilesController';
+  import { basicAuthenticate, xTokenAuthenticate } from '../middlewares/auth';
+  import { APIError, errorResponse } from '../middlewares/error';
 
-  // App Controller
-  router.route('/status').get(AppController.getStatus);
-  router.route('/stats').get(AppController.getStats);
+  // Group related routes
+  api.get('/status', AppController.getStatus);
+  api.get('/stats', AppController.getStats);
 
-  // User Controller
-  router.route('/users').post(UsersController.postNew);
-  router.route('/users/me').get(UsersController.getMe);
+  api.get('/connect', basicAuthenticate, AuthController.getConnect);
+  api.get('/disconnect', xTokenAuthenticate, AuthController.getDisconnect);
 
-  // Auth Controller
-  router.route('/connect').get(AuthController.getConnect);
-  router.route('/disconnect').get(AuthController.getDisconnect);
+  api.post('/users', UsersController.postNew);
+  api.get('/users/me', xTokenAuthenticate, UsersController.getMe);
 
-  // Files Controller
-  router.route('/files').post(FilesController.postUpload);
-  router.route('/files/:id').get(FilesController.getShow);
-  router.route('/files').get(FilesController.getIndex);
-  router.route('/files/:id/publish').put(FilesController.putPublish);
-  router.route('/files/:id/unpublish').put(FilesController.putUnpublish);
-  router.route('/files/:id/data').get(FilesController.getFile);
-}
+  api.post('/files', xTokenAuthenticate, FilesController.postUpload);
+  api.get('/files/:id', xTokenAuthenticate, FilesController.getShow);
+  api.get('/files', xTokenAuthenticate, FilesController.getIndex);
+  api.put('/files/:id/publish', xTokenAuthenticate, FilesController.putPublish);
+  api.put('/files/:id/unpublish', xTokenAuthenticate, FilesController.putUnpublish);
+  api.get('/files/:id/data', FilesController.getFile);
 
-export default controllerRouting;
+  // Handle 404 errors for all routes
+  api.all('*', (req, res, next) => {
+    errorResponse(new APIError(404, `Cannot ${req.method} ${req.url}`), req, res, next);
+  });
+
+  // Add errorResponse middleware only if it's not already added
+  if (!api._router.stack.some((layer) => layer.handle === errorResponse)) {
+    api.use(errorResponse);
+  }
+};
+
+export default injectRoutes;
